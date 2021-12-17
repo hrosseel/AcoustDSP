@@ -197,13 +197,16 @@ def ess_parse_novak(sweep: np.ndarray, inverse_spec: np.ndarray,
         rir: np.ndarray
             The resulting Room Impulse Response.
     """
+    # ensure that the input sweep is 2D
+    sweep = np.atleast_2d(sweep).T if len(sweep.shape) == 1 else sweep
+
     fft_length = int(2 ** np.ceil(np.log2(sweep.shape[0])))
 
     # Convert signal to FFT domain
-    X = np.fft.fft(sweep, n=fft_length) / fs
-    pos_freq_spec = (X * inverse_spec)
-    h = np.fft.irfft(pos_freq_spec, n=fft_length)
+    X = np.fft.fft(sweep, n=fft_length, axis=0) / fs
+    pos_freq_spec = (X.T * inverse_spec).T
+    h = np.fft.irfft(pos_freq_spec, n=fft_length, axis=0)
     if causality:
-        return h[:t_idle * fs]
+        return h[:t_idle * fs, :]
     else:
-        return np.fft.ifftshift(h)
+        return np.fft.ifftshift(h, axis=0)
