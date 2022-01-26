@@ -232,19 +232,16 @@ def calculate_tdoa(rirs: np.ndarray, mic_pairs: np.ndarray, max_td: int,
         mic_array. Shape of `rirs` needs to be equal to shape of
         `mic_array` (N x M), where N is the length of the microphone
         signal and M is the number of microphones.
-    mic_array: np.ndarray
-        Microphone array carthesian coordinates (M x D), where M is
-        the number of microphones and D is the number of dimensions.
-    fs: int, optional
-        Signal sampling rate in Hz, specified as a real-valued scalar.
-        Defaults to 1.
-    max_td: int
-        The maximum time in samples for a wavefront to propagate through
-        the given microphone array configuration.
     mic_pairs: np.ndarray
         A list containing all possible microphone pairs P in a given
         microphone-array setup. For M microphones, there are P * (P - 1) / 2
         unique pairs.
+    max_td: int
+        The maximum time in samples for a wavefront to propagate through
+        the given microphone array configuration.
+    fs: int, optional
+        Signal sampling rate in Hz, specified as a real-valued scalar.
+        Defaults to 1.
     weighting: str, optional
         Define the weighting function for the generalized
         cross-correlation. Defaults to 'direct' weighting.
@@ -281,6 +278,60 @@ def calculate_tdoa(rirs: np.ndarray, mic_pairs: np.ndarray, max_td: int,
         tau_hat = cc_gaussian_interp(r, tdoa_region, tau_hat, fs)
     # Return estimated TDOA
     return tau_hat
+
+
+def calc_tdoa_freq(rirs: np.ndarray, mic_array: np.ndarray, fs: int = 1):
+    """
+    Calculate the Time Difference of Arrival using the
+    Generalized Cross-Correlation method in the frequency domain.
+
+    Parameters
+    ----------
+    rirs: np.ndarray
+        Input Room Impulse Responses measured using the input
+        mic_array. Shape of `rirs` needs to be equal to shape of
+        `mic_array` (N x M), where N is the length of the microphone
+        signal and M is the number of microphones.
+    mic_array: np.ndarray
+        Microphone array carthesian coordinates (M x D), where M is
+        the number of microphones and D is the number of dimensions.
+    fs: int, optional
+        Signal sampling rate in Hz, specified as a real-valued scalar.
+        Defaults to 1.
+    Returns
+    -------
+    tau_hat: np.ndarray
+        Time Difference of Arrival between all microphone pairs. The
+        number of microphone pairs is: num_mics * (num_mics - 1) / 2
+    """
+
+    mic_pairs = np.array(list(itertools.combinations(range(mic_array.shape[0]),
+                                                     2)))
+    # 1. Find max. point in Cross-Correlation function
+    sig = rirs[:, mic_pairs[:, 0]]
+    refsig = rirs[:, mic_pairs[:, 1]]
+
+    # Calculate Cross-Spectral Density
+    r = gcc(sig, refsig)
+
+    shift = np.argmax(r, axis=0) - sig.shape[0]
+
+    # 2. Shift gcc with the rough TD estimate
+    sig_0 = np.array([np.roll(rirs[:, mic_pairs[idx, 0]], -s, 0)
+                      for idx, s in enumerate(shift)]).T
+
+    # 3. Transform the resulting CCF to the frequency domain
+    G_0 = np.conj(np.fft.rfft(refsig, axis=0)) * np.fft.rfft(sig_0, axis=0)
+
+    # 4. Find phase angle of the CCF and unwrap it
+    phase = np.angle(G_0)
+    freq = np.atleast_2d(np.arange(0, phase.shape[0]) * np.pi / fs).T
+
+    # 5. Find ToF using the direct mean of the phase
+    phase[-1] = np.nan  # remove nyquist freq. from calculation
+    slope = np.nanmean(phase / freq, dtype='float64', axis=0)
+
+    return (shift - slope) / fs
 
 
 def calculate_doa(tau_hat: np.ndarray, V: np.ndarray):
