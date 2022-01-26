@@ -6,16 +6,19 @@ References
 ----------
 [1] C. Knapp and G. Carter, “The generalized correlation method for estimation
     of time delay,” IEEE Trans. Acoust., Speech, Signal Process., vol. 24,
-    no. 4, pp. 320–327, Aug. 1976, doi: 10.1109/TASSP.1976.1162830.
+    no. 4, pp. 320-327, Aug. 1976, doi: 10.1109/TASSP.1976.1162830.
 [2] Xiaoming Lai and H. Torp, “Interpolation methods for time-delay estimation
     using cross-correlation method for blood velocity measurement,” IEEE Trans.
-    Ultrason., Ferroelect., Freq. Contr., vol. 46, no. 2, pp. 277–290, Mar.
+    Ultrason., Ferroelect., Freq. Contr., vol. 46, no. 2, pp. 277-290, Mar.
     1999, doi: 10.1109/58.753016.
 [3] Lei Zhang and Xiaolin Wu, “On Cross Correlation Based Discrete Time Delay
-    Estimation,” in Proceedings. (ICASSP ’05). IEEE International Conference on
+    Estimation,” in Proceedings. (ICASSP '05). IEEE International Conference on
     Acoustics, Speech, and Signal Processing, 2005., Philadelphia,
-    Pennsylvania, USA, 2005, vol. 4, pp. 981–984.
+    Pennsylvania, USA, 2005, vol. 4, pp. 981-984.
     doi: 10.1109/ICASSP.2005.1416175.
+[4] L. Svilainis, “Review on Time Delay Estimate Subsample Interpolation in
+    Frequency Domain,” IEEE Trans. Ultrason., Ferroelect., Freq. Contr., vol.
+    66, no. 11, pp. 1691-1698, Nov. 2019, doi: 10.1109/TUFFC.2019.2930661.
 
 """
 import itertools
@@ -283,7 +286,8 @@ def calculate_tdoa(rirs: np.ndarray, mic_pairs: np.ndarray, max_td: int,
 def calc_tdoa_freq(rirs: np.ndarray, mic_array: np.ndarray, fs: int = 1):
     """
     Calculate the Time Difference of Arrival using the
-    Generalized Cross-Correlation method in the frequency domain.
+    Generalized Cross-Correlation method in the frequency domain
+    [4].
 
     Parameters
     ----------
