@@ -209,4 +209,4 @@ def ess_parse_novak(sweep: np.ndarray, inverse_spec: np.ndarray,
     if causality:
         return h[:t_idle * fs, :]
     else:
-        return np.fft.ifftshift(h, axis=0)
+        return np.fft.ifftshift(h, axes=0)
