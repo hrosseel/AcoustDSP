@@ -312,20 +312,20 @@ def calc_tdoa_freq(rirs: np.ndarray, mic_array: np.ndarray, fs: int = 1):
     mic_pairs = np.array(list(itertools.combinations(range(mic_array.shape[0]),
                                                      2)))
     # 1. Find max. point in Cross-Correlation function
-    sig = rirs[:, mic_pairs[:, 0]]
-    refsig = rirs[:, mic_pairs[:, 1]]
+    sigs = rirs[:, mic_pairs[:, 0]]
+    refsigs = rirs[:, mic_pairs[:, 1]]
 
     # Calculate Cross-Spectral Density
-    r = gcc(sig, refsig)
+    r = gcc(sigs, refsigs)
 
-    shift = np.argmax(r, axis=0) - sig.shape[0]
+    shift = np.argmax(r, axis=0) - sigs.shape[0]
 
     # 2. Shift gcc with the rough TD estimate
-    sig_0 = np.array([np.roll(rirs[:, mic_pairs[idx, 0]], -s, 0)
-                      for idx, s in enumerate(shift)]).T
+    sigs_0 = np.array([np.roll(sig, -shift[idx])
+                       for idx, sig in enumerate(sigs.T)]).T
 
     # 3. Transform the resulting CCF to the frequency domain
-    G_0 = np.conj(np.fft.rfft(refsig, axis=0)) * np.fft.rfft(sig_0, axis=0)
+    G_0 = np.conj(np.fft.rfft(refsigs, axis=0)) * np.fft.rfft(sigs_0, axis=0)
 
     # 4. Find phase angle of the CCF and unwrap it
     phase = np.angle(G_0)
