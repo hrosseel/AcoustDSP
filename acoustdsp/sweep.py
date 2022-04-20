@@ -203,10 +203,10 @@ def ess_parse_novak(sweep: np.ndarray, inverse_spec: np.ndarray,
     fft_length = int(2 ** np.ceil(np.log2(sweep.shape[0])))
 
     # Convert signal to FFT domain
-    X = np.fft.fft(sweep, n=fft_length, axis=0) / fs
+    X = np.fft.fft(sweep, n=fft_length, axis=0)
     pos_freq_spec = (X.T * inverse_spec).T
     h = np.fft.irfft(pos_freq_spec, n=fft_length, axis=0)
     if causality:
-        return h[:t_idle * fs, :]
+        return h[:int(t_idle * fs), :]
     else:
         return np.fft.ifftshift(h, axes=0)
