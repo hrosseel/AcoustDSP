@@ -89,7 +89,8 @@ def lagrange_fd_filter_truncated(delay: np.ndarray, N: int, K: int):
 
 
 def simulate_direct_sound(distance: np.ndarray, fs: int, N: int = 20,
-                          K: int = 0, c: float = 343, ir_length: int = None):
+                          K: int = 0, c: float = 343, ir_length: int = None,
+                          scale: bool = False):
     """
         Simulate the ideal direct sound propagation measured by a microphone at
         a given distance from a sound source.
@@ -108,6 +109,9 @@ def simulate_direct_sound(distance: np.ndarray, fs: int, N: int = 20,
         are set to zero at each end of the Lagrange prototype filter.
     ir_length: int, optional
         Define the length of the output signals in samples.
+    scale: bool, optional
+        When set to True, scale the direct path according to the inverse
+        square law.
     Returns
     -------
     signals: np.ndarray
@@ -135,7 +139,7 @@ def simulate_direct_sound(distance: np.ndarray, fs: int, N: int = 20,
                              "input length.")
 
         # Dirac delta function at integer delay point
-        signals[i_delay, idx] = 1
+        signals[i_delay, idx] = (1 / distance[idx] ** 2) if scale else 1
         # Filter dirac delta function with a fractional delay FIR filter
         filter_taps = lagrange_fd_filter_truncated(f_delay, N, K)
         # Account for FIR filter delay
