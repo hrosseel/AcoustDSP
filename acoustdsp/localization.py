@@ -25,6 +25,7 @@ import itertools
 import warnings
 
 import numpy as np
+from numba import njit
 
 
 def gcc(sig: np.ndarray, refsig: np.ndarray,
@@ -159,6 +160,7 @@ def cc_gaussian_interp(R: np.ndarray, tdoa_region: np.ndarray, tau: float,
     return tau + c / fs
 
 
+@njit
 def cc_sinc_interp(R: np.ndarray, tau: float, interp_mul: int, fs: int,
                    half_width: float = 0.002):
     """
@@ -195,24 +197,24 @@ def cc_sinc_interp(R: np.ndarray, tau: float, interp_mul: int, fs: int,
                          " positive integer.")
 
     R = np.atleast_2d(R)
-    max_ind = np.argmax(np.abs(R), axis=0)
+    max_ind = np.argmax(np.abs(R), axis=0).astype(np.int32)
 
     fs_res = fs * interp_mul
     max_ind_res = max_ind * interp_mul
 
     # Search 10 samples around the direct path component
     n_margin_res = int(5 * interp_mul)
-    search_area = np.array([d + np.arange(-n_margin_res, n_margin_res + 1)
-                           for d in max_ind_res]).T / fs_res
-
-    amplitudes = [R[idx, i] for i, idx in enumerate(max_ind)]
-    cost_vector = np.zeros(search_area.shape)
-
+    search_area = (max_ind_res + np.arange(-n_margin_res, n_margin_res + 1
+                                           ).reshape((-1, 1))) / fs_res
     n_half_width = int(half_width * fs)
-    window = np.array([idx + np.arange(-n_half_width, n_half_width + 1)
-                       for idx in max_ind]).T
-    t = window / fs
+    window = max_ind + np.arange(-n_half_width, n_half_width
+                                 + 1).reshape((-1, 1))
+    window = np.where(window < R.shape[0], window, R.shape[0] - 1)
 
+    cost_vector = np.zeros(search_area.shape)
+    amplitudes = [R[i_max, i] for i, i_max in enumerate(max_ind)]
+
+    t = window / fs
     for i, r in enumerate(R.T):
         for j, t_0 in enumerate(search_area[:, i]):
             cost_vector[j, i] = np.sum(np.square(np.sinc(fs * (t[:, i] - t_0))
