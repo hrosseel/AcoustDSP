@@ -18,7 +18,10 @@ import localization as loc
 def spatial_decomposition_method(rirs: np.ndarray, ref_rir: np.ndarray,
                                  mic_array: np.ndarray, fs: int,
                                  threshold_db: float = 60,
-                                 win_size: int = None, c: float = 343.):
+                                 win_size: int = None,
+                                 win_type: str = "none",
+                                 interp_method: str = "gaussian",
+                                 c: float = 343.):
     """
     Compute the Spatial Decomposition Method by Tervo et al. This method
     divides an input Room Impulse Response (RIR) in small short-time windows
@@ -50,6 +53,14 @@ def spatial_decomposition_method(rirs: np.ndarray, ref_rir: np.ndarray,
         size should be larger than the propagation time of a sound wave
         through the microphone array. If this variable is not set, the default
         window size equals the maximum propagation time + 8 samples.
+    win_type: str, optional
+        Define the window type that is used for each frame. Possible to choose
+        between `none`, for no windowing, and `hanning` for a Hanning window.
+        Default window is 'none'.
+    interp_method: str, optional
+        Interpolation method used to improve the Direction of Arrival estimate
+        for each window. Possible interpolation schemes are: 'gaussian',
+        'parabolic', and 'sinc'. Defaults to 'gaussian' interpolation.
     c: float, optional
         Speed of sound in meters per second. Defaults to 343.0 m/s.
     Returns
@@ -59,14 +70,27 @@ def spatial_decomposition_method(rirs: np.ndarray, ref_rir: np.ndarray,
         (Nx3), where N is the number of samples in the input Room Impulse
         Response.
     """
+    if isinstance(interp_method, str):
+        interp_method = interp_method.lower()
+    else:
+        raise ValueError("Argument 'interp_method' should be of type 'str'.")
+    if isinstance(win_type, str):
+        win_type = win_type.lower()
+    else:
+        raise ValueError("Argument 'win_type' should be of type 'str'.")
+
     max_td, V = loc.get_propagation_time(mic_array, fs, c)
     rir_size = rirs.shape[0]
     num_mics = mic_array.shape[0]
 
     win_size = win_size if win_size else max_td + 8
-    win = np.hanning(win_size)
-
-    direct_sound_amplitude = np.max(np.abs(ref_rir))
+    if win_type == "none":
+        win = np.ones(win_size)
+    elif win_type == "hanning":
+        win = np.hanning(win_size)
+    else:
+        raise ValueError("Parameter `win_type` must have the value `none` or "
+                         "`hanning`.")
 
     num_frames = rir_size - win_size + 1
     frames = np.array([hankel(rirs[:num_frames, mic], rirs[-win_size:, mic]).T
@@ -77,26 +101,32 @@ def spatial_decomposition_method(rirs: np.ndarray, ref_rir: np.ndarray,
     # Get all possible microphone pairs P
     mic_pairs = np.array(list(itertools.combinations(range(mic_array.shape[0]),
                                                      2)))
-
-    threshold = (direct_sound_amplitude ** 2) * (10 ** (-abs(threshold_db)
-                                                        / 10))
-
     doas = np.full((ref_rir.shape[0], 3), np.nan)
 
     for idx, frame in enumerate(frames):
-        offset = frame.shape[0]
-        tdoa_region = offset + np.arange(-max_td, max_td + 1)
+        tdoa_region = win_size + np.arange(-max_td, max_td + 1)
 
         # Estimate the time difference of arrival using GCC
         r = loc.gcc(frame[:, mic_pairs[:, 0]], frame[:, mic_pairs[:, 1]])
         max_idices = np.argmax(r[tdoa_region, :], axis=0) - max_td
 
         # Make sure the correlations are sufficiently high w.r.t. the signal
-        # amplitude. If too low, TDOA estimation be inaccurate.
-        tdoas = np.zeros((1, mic_pairs.shape[0]))
-        if (r[max_idices + offset, range(r.shape[1])] > threshold).all():
+        # amplitude. If too low, TDOA estimation could be inaccurate.
+        tdoas = np.zeros((1, mic_pairs.shape[0])) * np.nan
+        threshold = 10 ** (-abs(threshold_db) / 5)
+        if (r[max_idices + win_size, :] > threshold).any():
             tau_hat = max_idices / fs
-            tdoas = loc.cc_gaussian_interp(r, tdoa_region, tau_hat, fs)
+
+            if interp_method == "gaussian":
+                tdoas = loc.cc_gaussian_interp(r, tdoa_region, tau_hat, fs)
+            elif interp_method == "parabolic":
+                tdoas = loc.cc_parabolic_interp(r, tdoa_region, tau_hat, fs)
+            elif interp_method == "sinc":
+                tdoas = loc.cc_sinc_interp(r, tau_hat, 50, fs, max_td / fs)
+            else:
+                raise ValueError("Unknown interpolation scheme is used. Please "
+                                 "choose between: 'gaussian', 'parabolic', or "
+                                 "'sinc' interpolation.")
 
         distance = (idx + win_size // 2) / fs * c
         doas[idx + win_size // 2, :] = distance * loc.calculate_doa(tdoas, V).T
