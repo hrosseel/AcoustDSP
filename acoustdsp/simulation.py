@@ -110,8 +110,7 @@ def simulate_direct_sound(distance: np.ndarray, fs: int, N: int = 20,
     ir_length: int, optional
         Define the length of the output signals in samples.
     scale: bool, optional
-        When set to True, scale the direct path according to the inverse
-        square law.
+        When set to True, scale the direct path according to the inverse law.
     Returns
     -------
     signals: np.ndarray
@@ -131,7 +130,7 @@ def simulate_direct_sound(distance: np.ndarray, fs: int, N: int = 20,
         # Add one second to the total duration
         delay = distance[idx] / c * fs
         # Get integer and fractional part of the delay in samples
-        i_delay = int(delay // 1)
+        i_delay = int(delay)
         f_delay = delay - i_delay
 
         if (i_delay + 1 > signals.shape[0]):
@@ -139,7 +138,7 @@ def simulate_direct_sound(distance: np.ndarray, fs: int, N: int = 20,
                              "input length.")
 
         # Dirac delta function at integer delay point
-        signals[i_delay, idx] = (1 / distance[idx] ** 2) if scale else 1
+        signals[i_delay, idx] = 1 / distance[idx] if scale else 1
         # Filter dirac delta function with a fractional delay FIR filter
         filter_taps = lagrange_fd_filter_truncated(f_delay, N, K)
         # Account for FIR filter delay
