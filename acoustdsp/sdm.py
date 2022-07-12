@@ -13,6 +13,7 @@ import numpy as np
 from scipy.linalg import hankel
 
 import localization as loc
+from utils import cart2sph
 
 
 def spatial_decomposition_method(rirs: np.ndarray, mic_array: np.ndarray,
@@ -114,16 +115,17 @@ def spatial_decomposition_method(rirs: np.ndarray, mic_array: np.ndarray,
         tdoa_region = win_size + np.arange(-max_td - 1, max_td)
         # Estimate the time difference of arrival using GCC
         r = loc.gcc(frame[:, mic_pairs[:, 0]], frame[:, mic_pairs[:, 1]])
-        max_idices = np.argmax(r[tdoa_region, :], axis=0) - max_td
+        max_ind = np.argmax(r[tdoa_region, :], axis=0)
 
         # Make sure the correlations are sufficiently high w.r.t. the signal
         # amplitude. If too low, TDOA estimation could be inaccurate.
         tdoas = np.zeros((1, mic_pairs.shape[0])) * np.nan
         threshold = 10 ** (-abs(threshold_db) / 5)
-        if (np.array([r[max_idx + max_td, idx] > threshold
-                      for idx, max_idx in enumerate(max_idices)])).any():
 
-            tau_hat = max_idices / fs
+        maxima = r[max_ind + tdoa_region[0], np.arange(0, max_ind.shape[0])]
+
+        if (maxima > threshold).any():
+            tau_hat = (max_ind - max_td) / fs
             if interp_method == "none":
                 tdoas = tau_hat
             elif interp_method == "gaussian":
@@ -131,14 +133,15 @@ def spatial_decomposition_method(rirs: np.ndarray, mic_array: np.ndarray,
             elif interp_method == "parabolic":
                 tdoas = loc.cc_parabolic_interp(r, tdoa_region, tau_hat, fs)
             elif interp_method == "sinc":
-                tdoas = loc.cc_sinc_interp2(r, tau_hat, 50, fs)
+                tdoas = loc.cc_sinc_interp(r, tau_hat, 1000, fs)
+            elif interp_method == "whittaker":
+                tdoas = loc.cc_whittaker_shannon_interp(r, tau_hat,
+                                                        interp_factor=1000,
+                                                        fs=fs)
             else:
                 raise ValueError("Unknown interpolation scheme is used. "
                                  "Please choose between: 'gaussian', "
                                  "'parabolic', or 'sinc' interpolation.")
 
-            distance = (idx + win_size // 2) / fs * c
-            doa_est = loc.calculate_doa(tdoas, V).T
-            doas[idx + win_size // 2, :] = distance * doa_est + ref_pos
-
-    return doas
+            doas[idx + win_size // 2, :] = loc.calculate_doa(tdoas, V).T
+    return cart2sph(doas)

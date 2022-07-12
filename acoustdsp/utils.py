@@ -90,41 +90,38 @@ def spectrogram(signal: np.ndarray, fs: int, win: str or tuple,
     return pcm, pcm.get_clim()
 
 
-def cart2sph(x: float or np.ndarray, y: float or np.ndarray,
-             z: float or np.ndarray):
+def cart2sph(cart: np.ndarray):
     """
-    Transform Cartesian coordinates to spherical coordinates.
+    Transform Cartesian coordinates to spherical coordinates in a 3D
+    space.
 
     Parameters
     ----------
-        x: float or np.ndarray
-            Cartesian x-coordinate, specified as a scalar or np.ndarray of size
-            (N x 1).
-        y: float or np.ndarray
-            Cartesian y-coordinate, specified as a scalar or np.ndarray of size
-            (N x 1).
-        z: float or np.ndarray
-            Cartesian z-coordinate, specified as a scalar or np.ndarray of size
-            (N x 1).
-
+        cart: np.ndarray
+            Cartesian coordinates in 3D space. Array of size (N x 3).
     Returns
     -------
-        azimuth: float or np.ndarray
-            Azimuth angle, in radians, measured from the positive x-axis.
-            Value ranges from [-pi, pi] as a scalar or np.ndarray of size
-            (N x 1).
-        elevation: float or np.ndarray
-            Elevation angle, in radians, measured from the x-y plane.
-            Value ranges from [-pi / 2, pi / 2] as a scalar or np.ndarray of
-            size (N x 1).
-        r: float or np.ndarray
-            Radius. The distance from the origin to a point located in the
-            x-y-z plane as a scalar or np.ndarray of size (N x 1).
+        sph: np.ndarray
+            Array of spherical coordinates, size (N x 3) consisting of:
+                azimuth: float
+                    Azimuth angle, in radians, measured from the positive
+                    x-axis. Value ranges from [-pi, pi] as a scalar.
+                elevation: float
+                    Elevation angle, in radians, measured from the x-y plane.
+                    Value ranges from [-pi / 2, pi / 2] as a scalar.
+                r: float
+                    Radius. The distance from the origin to a point located in
+                    the x-y-z plane as a scalar.
     """
-    azimuth = np.arctan2(y, x)
-    elevation = np.arctan2(z, np.sqrt(x ** 2 + y ** 2))
-    r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
-    return (azimuth, elevation, r)
+    if len(cart.shape) < 2:
+        cart = np.atleast_2d(cart)
+    if cart.shape[1] != 3:
+        raise ValueError("Parameter `cart` must be of size (N, 3)")
+
+    azi = np.arctan2(cart[:, 1], cart[:, 0])
+    ele = np.arctan2(cart[:, 2], np.sqrt(cart[:, 0] ** 2 + cart[:, 1] ** 2))
+    r = np.linalg.norm(cart, 2, axis=1)
+    return np.stack([azi, ele, r], axis=1)
 
 
 def sph2cart(azimuth: float or np.ndarray, elevation: float or np.ndarray,
@@ -148,17 +145,34 @@ def sph2cart(azimuth: float or np.ndarray, elevation: float or np.ndarray,
 
     Returns
     ----------
-        x: float or np.ndarray
-            Cartesian x-coordinate, specified as a scalar or np.ndarray of size
-            (N x 1).
-        y: float or np.ndarray
-            Cartesian y-coordinate, specified as a scalar or np.ndarray of size
-            (N x 1).
-        z: float or np.ndarray
-            Cartesian z-coordinate, specified as a scalar or np.ndarray of size
-            (N x 1).
+        cart: np.ndarray
+            Numpy array of size (N x 3). Axis 1 represents the Cartesian
+            coordinates: x, y, z, respectively.
     """
-    x = r * np.cos(elevation) * np.cos(azimuth)
-    y = r * np.cos(elevation) * np.sin(azimuth)
-    z = r * np.sin(elevation)
-    return (x, y, z)
+    azimuth = np.atleast_1d(azimuth)
+    elevation = np.atleast_1d(elevation)
+    r = np.atleast_1d(r)
+
+    if len(azimuth) == len(elevation) == len(r):
+        x = r * np.cos(elevation) * np.cos(azimuth)
+        y = r * np.cos(elevation) * np.sin(azimuth)
+        z = r * np.sin(elevation)
+        return np.vstack([x, y, z]).T
+    else:
+        raise ValueError("All input parameters must be of the same size.")
+
+
+def rad2deg(angle: float or np.ndarray):
+    """
+    Convert angle in Radians to smallest angle in degrees.
+
+    Parameters
+    ----------
+    angle: float or np.ndarray
+        Angle in Radians
+    Returns
+    -------
+    angle: float or np.ndarray
+        Smallest angle in Degrees
+    """
+    return ((angle / np.pi * 180) + 180) % 360 - 180
