@@ -24,6 +24,7 @@ References
 import itertools
 import warnings
 
+import numba
 import numpy as np
 
 from acoustdsp import cc_model
@@ -58,7 +59,7 @@ def gcc(sig: np.ndarray, refsig: np.ndarray,
         raise ValueError("This function currently only supports Direct and "
                          "PHAT weighting.")
 
-    fft_len = sig.shape[0] + refsig.shape[0] - 1
+    fft_len = sig.shape[0] + refsig.shape[0]
 
     SIG = np.fft.rfft(sig, n=fft_len, axis=0)
     REFSIG = np.fft.rfft(refsig, n=fft_len, axis=0)
@@ -68,7 +69,7 @@ def gcc(sig: np.ndarray, refsig: np.ndarray,
 
     # Apply weighting and retrieve cross-correlation.
     R = np.fft.ifftshift(np.fft.irfft(G / W, n=fft_len, axis=0), axes=0)
-    return R
+    return R[1:, :]
 
 
 def cc_parabolic_interp(R: np.ndarray, tdoa_region: np.ndarray, tau: float,
@@ -170,8 +171,7 @@ def cc_gaussian_interp(R: np.ndarray, tdoa_region: np.ndarray, tau: float,
     return tau + c / fs
 
 
-def cc_sinc_interp(r: np.ndarray, tau: float, interp_mul: int, fs: int,
-                   half_width: float = 0.002):
+def cc_sinc_interp(r: np.ndarray, tau: float, interp_mul: int, fs: int):
     """
     Fit a critically sampled sinc function to the maximum value of the
     cross-correlation function. Returns the improved time-delay found by the
@@ -204,97 +204,33 @@ def cc_sinc_interp(r: np.ndarray, tau: float, interp_mul: int, fs: int,
     if(interp_mul <= 0):
         raise ValueError("Interpolation multiplier has to be a strictly"
                          " positive integer.")
-
     if len(r.shape) == 1:
         r = np.atleast_2d(r).T
-    max_ind = np.asarray(np.argmax(r, axis=0))
 
-    fs_res = fs * interp_mul
-    max_ind_res = max_ind * interp_mul
-
-    # Search 1 sample around the direct path component
-    search_area = (max_ind_res + np.arange(-interp_mul, interp_mul + 1
-                                           ).reshape((-1, 1))) / fs_res
-    n_half_width = int(half_width * fs)
-    window = max_ind + np.arange(-n_half_width, n_half_width
-                                 + 1).reshape((-1, 1))
-    window = np.where(window < r.shape[0], window, r.shape[0] - 1)
-
-    cost_vector = np.zeros(search_area.shape)
-    amplitudes = [r[i_max, i] for i, i_max in enumerate(max_ind)]
-
-    t = window / fs
-    for i, r_i in enumerate(r.T):
-        for j, t_0 in enumerate(search_area[:, i]):
-            cost_vector[j, i] = np.sum(np.square(np.sinc(fs * (t[:, i] - t_0))
-                                       - r_i[window[:, i]] / amplitudes[i]))
-    minima = np.argmin(cost_vector, axis=0)
-    return (minima - interp_mul) / fs_res + tau
-
-
-def cc_sinc_interp2(r: np.ndarray, tau: float, interp_mul: int, fs: int,
-                    half_width: float = None):
-    """
-    Fit a critically sampled sinc function to the maximum value of the
-    cross-correlation function. Returns the improved time-delay found by the
-    fitting.
-
-        Parameters
-    ----------
-    R: np.ndarray
-        Input cross-correlation signal. R has a size of (2N-1) x S. Where
-        S is the number of cross-correlations.
-    tau: float
-        Estimated time delay value in seconds which maximizes the
-        cross-correlation function `R`.
-    interp_mul: int
-        Interpolation factor equal to `T / T_i`. Where `T` is the sampling
-        period of the original sampled signal. `T_i` is the interpolation
-        sampling period.
-    fs: int, optional
-        Signal sampling rate in Hz, specified as a real-valued scalar.
-        Defaults to 1.
-    half_width: float
-        interpolation half width of the sinc fitting. Specifies the maximum
-        time-delay to fit the sinc funtion around the maximum of the
-        cross-correlation function.
-    Returns
-    -------
-    tau: float
-        Improved time delay estimation in seconds.
-    """
-    if(interp_mul <= 0):
-        raise ValueError("Interpolation multiplier has to be a strictly"
-                         " positive integer.")
-    if half_width is None:
-        half_width = (r.shape[0] // 2) / fs
-
-    if len(r.shape) == 1:
-        r = np.atleast_2d(r).T
-    max_ind = np.asarray(np.argmax(r, axis=0))
+    max_ind = np.atleast_1d((tau * fs + r.shape[0] // 2)).astype(np.int32)
 
     # Search 1 sample around the direct path components
-    search_area = (max_ind + np.arange(-interp_mul, interp_mul + 1
-                                       ).reshape((-1, 1)) / interp_mul) / fs
-    n_half_width = int(half_width * fs)
-    window = max_ind + np.arange(-n_half_width, n_half_width
-                                 + 1).reshape((-1, 1))
+    search_area = tau + (np.arange(-interp_mul, interp_mul + 1).reshape(-1, 1)
+                         / (interp_mul * fs))
+    cost_vector = __cc_sinc_interp_helper__(r, search_area, max_ind, fs)
 
-    # Make sure that window is not outside of r
-    window = np.where(window < r.shape[0], window, r.shape[0] - 1)
+    minima = np.argmin(cost_vector, axis=0)
+    return search_area[minima, np.arange(0, minima.shape[0])]
 
+
+@numba.njit
+def __cc_sinc_interp_helper__(r, search_area, max_ind, fs):
     cost_vector = np.zeros(search_area.shape)
+    half_width = r.shape[0] // 2
+    t = np.arange(-half_width, half_width + 1) / fs
+
     amplitudes = [r[i_max, i] for i, i_max in enumerate(max_ind)]
 
-    t = window / fs
     for i, r_i in enumerate(r.T):
         for j, t_0 in enumerate(search_area[:, i]):
-            sinc = np.sinc(fs * (t[:, i] - t_0))
-            cost_vector[j, i] = np.sum(np.square(sinc / np.max(sinc)
-                                       - r_i[window[:, i]] / amplitudes[i]))
-    minima = np.argmin(cost_vector, axis=0)
-    return search_area[minima, np.arange(0, minima.shape[0])] \
-        - (max_ind / fs) + tau
+            sinc = amplitudes[i] * np.sinc(fs * (t - t_0))
+            cost_vector[j, i] = np.sum(np.square(sinc - r_i))
+    return cost_vector
 
 
 def cc_whittaker_shannon_interp(r: np.ndarray, tau_est: float,
@@ -488,8 +424,8 @@ def calc_tdoa_freq(rirs: np.ndarray, mic_array: np.ndarray, fs: int = 1):
 
 def calculate_doa(tau_hat: np.ndarray, V: np.ndarray):
     """
-    Calculate the DOA from the slowness vector obtained with the
-    Cross-Correlation method.
+    Calculate the Direction Of Arrival by finding the slowness vector using
+    Time Difference of Arrival estimation.
 
     Parameters
     ----------
