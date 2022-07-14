@@ -13,10 +13,11 @@
 """
 
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from scipy import integrate
-from acoustdsp import utils
+
+from . import utils
 
 
 def energy_decay_curve(rir: np.ndarray, plot: bool = False) -> np.ndarray:

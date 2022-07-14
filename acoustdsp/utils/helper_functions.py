@@ -2,8 +2,6 @@
 Module which implements several utility functions that are used throughout
 this library.
 """
-
-
 import numpy as np
 from matplotlib.collections import QuadMesh
 import matplotlib.pyplot as plt

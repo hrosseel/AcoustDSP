@@ -12,8 +12,8 @@ import itertools
 import numpy as np
 from scipy.linalg import hankel
 
-import localization as loc
-from utils import cart2sph
+from . import localization as loc
+from .utils import cart2sph
 
 
 def spatial_decomposition_method(rirs: np.ndarray, mic_array: np.ndarray,

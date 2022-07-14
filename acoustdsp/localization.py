@@ -27,7 +27,7 @@ import warnings
 import numba
 import numpy as np
 
-from acoustdsp import cc_model
+from .utils import cc_model
 
 
 def gcc(sig: np.ndarray, refsig: np.ndarray,

@@ -13,9 +13,10 @@
 
 
 import math
+from typing import Tuple
+
 import numpy as np
 from scipy import signal as sig
-from typing import Tuple
 
 
 def ess_gen_farina(f_start: int, f_final: int, t_sweep: float, t_idle: float,
